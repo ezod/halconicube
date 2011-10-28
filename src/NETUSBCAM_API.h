@@ -12,6 +12,8 @@
 #ifndef __NETUSBCAM_API_h__
 #define __NETUSBCAM_API_h__
 
+typedef int bool;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
