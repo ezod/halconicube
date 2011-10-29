@@ -19,14 +19,8 @@
 
 #define STR_CASE_CMP(S1,S2)   strcasecmp(S1,S2)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-    extern HUserExport Herror FGInit(Hproc_handle proc_id, FGClass *fg);
-    extern HLibExport Herror IOPrintErrorMessage(char *err);
-#ifdef __cplusplus
-}
-#endif
+extern HUserExport Herror FGInit(Hproc_handle proc_id, FGClass *fg);
+extern HLibExport Herror IOPrintErrorMessage(char *err);
 
 typedef struct
 {
@@ -38,8 +32,6 @@ static FGClass * fgClass;
 static TFGInstance FGInst[FG_MAX_INST];
 static INT num_instances = 0;
 static INT num_devices = 0;
-
-static char errMsg[MAX_STRING];
 
 static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
