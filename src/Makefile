@@ -2,8 +2,8 @@ CC= gcc
 CFLAGS= -m32 -fPIC -O3 -Wall
 LDFLAGS= -m32
 
-H_INCLUDE=/opt/halcon/include
-H_LIB=/opt/halcon32/lib/x86sse2-linux2.4-gcc40
+H_INCLUDE=$(HALCONROOT)/include
+H_LIB=$(HALCONROOT)/lib/$(HALCONARCH)
 
 all: hAcqICube.so
 
