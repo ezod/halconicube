@@ -6,7 +6,9 @@
 #define INTERFACE_REVISION "4.0"
 
 #include <time.h>
+#include <stdio.h>
 #include <strings.h>
+#include <pthread.h>
 
 #include <Halcon.h>
 #include <hlib/CIOFrameGrab.h>
@@ -16,11 +18,12 @@
 /* Use this macro to display error messages                               */
 #define MY_PRINT_ERROR_MESSAGE(ERR) { \
     if (HDoLowError) IOPrintErrorMessage(ERR); }
+static char errMsg[MAX_STRING];
 
 #define STR_CASE_CMP(S1,S2)   strcasecmp(S1,S2)
 
-extern HUserExport Herror FGInit(Hproc_handle proc_id, FGClass *fg);
-extern HLibExport Herror IOPrintErrorMessage(char *err);
+extern HUserExport Herror FGInit(Hproc_handle proc_id, FGClass * fg);
+extern HLibExport Herror IOPrintErrorMessage(char * err);
 
 typedef struct
 {
@@ -33,11 +36,26 @@ static TFGInstance FGInst[FG_MAX_INST];
 static INT num_instances = 0;
 static INT num_devices = 0;
 
+static pthread_mutex_t image_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t image_ready = PTHREAD_COND_INITIALIZER;
+
+static INT ImageComplete(void * buffer, unsigned int bsize, void * context)
+{
+    pthread_mutex_lock(&image_mutex);
+
+    memcpy(context, buffer, bsize);
+
+    pthread_cond_signal(&image_ready);
+    pthread_mutex_unlock(&image_mutex);
+
+    return 0;
+}
+
 static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
 
-    if(!NETUSBCAM_Open(currInst->index))
+    if(NETUSBCAM_Open(currInst->index) != 0)
     {
         MY_PRINT_ERROR_MESSAGE("open camera failed")
         return H_ERR_FGNI;
@@ -51,7 +69,7 @@ static Herror FGClose (Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
 
-    if(!NETUSBCAM_Close(currInst->index))
+    if(NETUSBCAM_Close(currInst->index) != 0)
     {
         MY_PRINT_ERROR_MESSAGE("close camera failed")
         return H_ERR_FGCLOSE;
@@ -69,20 +87,40 @@ static Herror FGGrabStartAsync(Hproc_handle proc_id, FGInstance * fginst, double
 static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, INT * num_image)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
+    Herror err;
+    INT save, xres, yres, xpos, ypos;
 
-    if(!NETUSBCAM_Start(currInst->index))
+    NETUSBCAM_GetResolution(currInst->index, &xres, &yres, &xpos, &ypos);
+
+    pthread_mutex_lock(&image_mutex);
+
+    HReadSysComInfo(proc_id, HGInitNewImage, &save);
+    HWriteSysComInfo(proc_id, HGInitNewImage, FALSE);
+    *num_image = 1;
+    err = HNewImage(proc_id, &image[0], BYTE_IMAGE, xres, yres);
+    if(err != H_MSG_OK)
+    {
+        HWriteSysComInfo(proc_id, HGInitNewImage, save);
+        return err;
+    }
+
+    NETUSBCAM_SetCallback(currInst->index, CALLBACK_RAW, &ImageComplete, (void *)image[0].pixel.b);
+
+    if(NETUSBCAM_Start(currInst->index) != 0)
     {
         MY_PRINT_ERROR_MESSAGE("start camera failed")
         return H_ERR_FGF;
     }
 
-    /* TODO: what now? */
+    pthread_cond_wait(&image_ready, &image_mutex);
 
-    if(!NETUSBCAM_Stop(currInst->index))
+    if(NETUSBCAM_Stop(currInst->index) != 0)
     {
         MY_PRINT_ERROR_MESSAGE("stop camera failed")
         return H_ERR_FGF;
     }
+
+    pthread_mutex_unlock(&image_mutex);
 
     return H_MSG_OK;
 }
@@ -208,6 +246,8 @@ static FGInstance ** FGOpenRequest(Hproc_handle proc_id, FGInstance * fginst)
 
 Herror FGInit(Hproc_handle proc_id, FGClass * fg)
 {
+    INT i;
+
     fg->interface_version = FG_INTERFACE_VERSION;
 
     fg->available = TRUE;
@@ -227,7 +267,8 @@ Herror FGInit(Hproc_handle proc_id, FGClass * fg)
 
     fgClass = fg;
 
-    /* TODO: set default parameter values */
+    for(i = 0; i < FG_MAX_INST; i++)
+        FGInst[i].index = i;
 
     num_devices = NETUSBCAM_Init();
     if(num_devices <= 0)
