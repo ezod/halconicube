@@ -36,6 +36,19 @@ static TFGInstance FGInst[FG_MAX_INST];
 static INT num_instances = 0;
 static INT num_devices = 0;
 
+#define NUM_MODES 9
+static int modelist[NUM_MODES][2] = {
+    {320, 240},
+    {640, 480},
+    {752, 480},
+    {800, 600},
+    {1024, 768},
+    {1280, 1024},
+    {1600, 1200},
+    {2048, 1536},
+    {2592, 1944}
+};
+
 static pthread_mutex_t image_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t image_ready = PTHREAD_COND_INITIALIZER;
 
@@ -54,13 +67,43 @@ static INT ImageComplete(void * buffer, unsigned int bsize, void * context)
 static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
+    INT i;
+    unsigned int nmodes = NUM_MODES;
+    unsigned int modes[NUM_MODES];
 
+    if(fginst->port >= num_devices)
+    {
+        MY_PRINT_ERROR_MESSAGE("invalid device index")
+        return H_ERR_FGNI;
+    }
+    currInst->index = fginst->port;
     if(NETUSBCAM_Open(currInst->index) != 0)
     {
         MY_PRINT_ERROR_MESSAGE("open camera failed")
         return H_ERR_FGNI;
     }
     num_instances++;
+
+    if(fginst->horizontal_resolution > 0 && fginst->vertical_resolution > 0)
+    {
+        NETUSBCAM_GetModeList(currInst->index, &nmodes, modes);
+        for(i = 0; i < nmodes; i++)
+        {
+            if(fginst->horizontal_resolution == modelist[modes[i]][0] && fginst->vertical_resolution == modelist[modes[i]][1])
+            {
+                NETUSBCAM_SetMode(currInst->index, modes[i]);
+                break;
+            }
+        }
+    }
+
+    if(fginst->image_width && fginst->image_height)
+    {
+        if(NETUSBCAM_SetResolution(currInst->index, fginst->image_width, fginst->image_height, fginst->start_col, fginst->start_row) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("setting ROI failed")
+        }
+    }
 
     return H_MSG_OK;
 }
