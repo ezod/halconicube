@@ -7,6 +7,7 @@
 
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <strings.h>
 #include <pthread.h>
 
@@ -29,6 +30,8 @@ typedef struct
 {
     INT index;
     HBOOL trigger;
+    INT xres, yres;
+    HBYTE * image;
 } TFGInstance;
 
 static FGClass * fgClass;
@@ -68,7 +71,7 @@ static INT ImageComplete(void * buffer, unsigned int bsize, void * context)
 static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
-    INT i;
+    INT i, xpos, ypos;
     unsigned int nmodes = NUM_MODES;
     unsigned int modes[NUM_MODES];
 
@@ -106,15 +109,37 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
         }
     }
 
+    NETUSBCAM_GetResolution(currInst->index, &currInst->xres, &currInst->yres, &xpos, &ypos);
+    currInst->image = (HBYTE *)malloc(currInst->xres * currInst->yres * sizeof(HBYTE));
+
     if(fginst->external_trigger)
         NETUSBCAM_SetTrigger(currInst->index, 2);
+    else
+    {
+        NETUSBCAM_SetTrigger(currInst->index, 3);
+        NETUSBCAM_SetTrigger(currInst->index, 0);
+    }
+
+    NETUSBCAM_SetCallback(currInst->index, CALLBACK_RAW, &ImageComplete, (void *)currInst->image);
+
+    if(NETUSBCAM_Start(currInst->index) != 0)
+    {
+        MY_PRINT_ERROR_MESSAGE("start camera failed")
+        return H_ERR_FGF;
+    }
 
     return H_MSG_OK;
 }
 
-static Herror FGClose (Hproc_handle proc_id, FGInstance * fginst)
+static Herror FGClose(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
+
+    if(NETUSBCAM_Stop(currInst->index) != 0)
+    {
+        MY_PRINT_ERROR_MESSAGE("stop camera failed")
+        return H_ERR_FGF;
+    }
 
     if(NETUSBCAM_Close(currInst->index) != 0)
     {
@@ -135,38 +160,22 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
     Herror err;
-    INT save, xres, yres, xpos, ypos;
-
-    NETUSBCAM_GetResolution(currInst->index, &xres, &yres, &xpos, &ypos);
-
-    pthread_mutex_lock(&image_mutex);
+    INT save;
 
     HReadSysComInfo(proc_id, HGInitNewImage, &save);
     HWriteSysComInfo(proc_id, HGInitNewImage, FALSE);
     *num_image = 1;
-    err = HNewImage(proc_id, &image[0], BYTE_IMAGE, xres, yres);
+    err = HNewImage(proc_id, &image[0], BYTE_IMAGE, currInst->xres, currInst->yres);
     if(err != H_MSG_OK)
     {
         HWriteSysComInfo(proc_id, HGInitNewImage, save);
         return err;
     }
 
-    NETUSBCAM_SetCallback(currInst->index, CALLBACK_RAW, &ImageComplete, (void *)image[0].pixel.b);
-
-    if(NETUSBCAM_Start(currInst->index) != 0)
-    {
-        MY_PRINT_ERROR_MESSAGE("start camera failed")
-        return H_ERR_FGF;
-    }
-
+    pthread_mutex_lock(&image_mutex);
+    NETUSBCAM_SetTrigger(currInst->index, 1);
     pthread_cond_wait(&image_ready, &image_mutex);
-
-    if(NETUSBCAM_Stop(currInst->index) != 0)
-    {
-        MY_PRINT_ERROR_MESSAGE("stop camera failed")
-        return H_ERR_FGF;
-    }
-
+    memcpy((void *)image[0].pixel.b, (void *)currInst->image, currInst->xres * currInst->yres);
     pthread_mutex_unlock(&image_mutex);
 
     return H_MSG_OK;
