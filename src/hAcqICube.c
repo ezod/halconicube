@@ -212,22 +212,24 @@ static Herror FGInfo(Hproc_handle proc_id, INT queryType, char ** info, Hcpar **
             break;
         case FG_QUERY_PARAMETERS:
             *info = "Additional parameters for this image acquisition interface.";
-            /* TODO: specify all parameter names and types */
-            /*HCkP(HAlloc(proc_id, (size_t)(0 * sizeof(Hcpar)), &val));*/
-            *values = NULL;
-            *numValues = 0;
+            HCkP(HAlloc(proc_id, (size_t)(1 * sizeof(Hcpar)), &val));
+            val[0].par.s = FG_PARAM_INDEX;
+            for(i = 0; i < 1; i++)
+                val[i].type = STRING_PAR;
+            *values = val;
+            *numValues = 1;
             break;
         case FG_QUERY_PARAMETERS_RO:
             *info = "Additional read-only parameters for this interface.";
-            /* TODO: specify all parameter names and types */
-            /*HCkP(HAlloc(proc_id, (size_t)(0 * sizeof(Hcpar)), &val));*/
-            *values = NULL;
-            *numValues = 0;
+            HCkP(HAlloc(proc_id, (size_t)(1 * sizeof(Hcpar)), &val));
+            val[0].par.s = FG_PARAM_INDEX;
+            for(i = 0; i < 1; i++)
+                val[i].type = STRING_PAR;
+            *values = val;
+            *numValues = 1;
             break;
         case FG_QUERY_PARAMETERS_WO:
             *info = "Additional write-only parameters for this interface.";
-            /* TODO: specify all parameter names and types */
-            /*HCkP(HAlloc(proc_id, (size_t)(0 * sizeof(Hcpar)), &val));*/
             *values = NULL;
             *numValues = 0;
             break;
