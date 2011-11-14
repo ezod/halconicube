@@ -29,8 +29,6 @@ extern HLibExport Herror IOPrintErrorMessage(char * err);
 typedef struct
 {
     INT index;
-    HBOOL trigger;
-    INT xres, yres;
     HBYTE * image;
 } TFGInstance;
 
@@ -71,7 +69,7 @@ static INT ImageComplete(void * buffer, unsigned int bsize, void * context)
 static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
-    INT i, xpos, ypos;
+    INT i;
     unsigned int nmodes = NUM_MODES;
     unsigned int modes[NUM_MODES];
 
@@ -109,8 +107,8 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
         }
     }
 
-    NETUSBCAM_GetResolution(currInst->index, &currInst->xres, &currInst->yres, &xpos, &ypos);
-    currInst->image = (HBYTE *)malloc(currInst->xres * currInst->yres * sizeof(HBYTE));
+    NETUSBCAM_GetResolution(currInst->index, &fginst->image_width, &fginst->image_height, &fginst->start_col, &fginst->start_row);
+    currInst->image = (HBYTE *)malloc(fginst->image_width * fginst->image_height * sizeof(HBYTE));
 
     if(fginst->external_trigger)
         NETUSBCAM_SetTrigger(currInst->index, 2);
@@ -165,7 +163,7 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
     HReadSysComInfo(proc_id, HGInitNewImage, &save);
     HWriteSysComInfo(proc_id, HGInitNewImage, FALSE);
     *num_image = 1;
-    err = HNewImage(proc_id, &image[0], BYTE_IMAGE, currInst->xres, currInst->yres);
+    err = HNewImage(proc_id, &image[0], BYTE_IMAGE, fginst->image_width, fginst->image_height);
     if(err != H_MSG_OK)
     {
         HWriteSysComInfo(proc_id, HGInitNewImage, save);
@@ -175,7 +173,7 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
     pthread_mutex_lock(&image_mutex);
     NETUSBCAM_SetTrigger(currInst->index, 1);
     pthread_cond_wait(&image_ready, &image_mutex);
-    memcpy((void *)image[0].pixel.b, (void *)currInst->image, currInst->xres * currInst->yres);
+    memcpy((void *)image[0].pixel.b, (void *)currInst->image, fginst->image_width * fginst->image_height);
     pthread_mutex_unlock(&image_mutex);
 
     return H_MSG_OK;
