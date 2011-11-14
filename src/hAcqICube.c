@@ -28,6 +28,7 @@ extern HLibExport Herror IOPrintErrorMessage(char * err);
 typedef struct
 {
     INT index;
+    HBOOL trigger;
 } TFGInstance;
 
 static FGClass * fgClass;
@@ -104,6 +105,9 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
             MY_PRINT_ERROR_MESSAGE("setting ROI failed")
         }
     }
+
+    if(fginst->external_trigger)
+        NETUSBCAM_SetTrigger(currInst->index, 2);
 
     return H_MSG_OK;
 }
@@ -234,15 +238,44 @@ static Herror FGInfo(Hproc_handle proc_id, INT queryType, char ** info, Hcpar **
             *values = val;
             *numValues = num_devices;
             break;
+        case FG_QUERY_EXT_TRIGGER:
+            *info = "Value list for ExternalTrigger parameter.";
+            HCkP(HAlloc(proc_id, (size_t)(2 * sizeof(*val)), &val));
+            val[0].par.s = "false";
+            val[0].type = STRING_PAR;
+            val[1].par.s = "true";
+            val[1].type = STRING_PAR;
+            *values = val;
+            *numValues = 2;
+            break;
+        case FG_QUERY_HORIZONTAL_RESOLUTION:
+            *info = "Supported HorizontalResolution values.";
+            HCkP(HAlloc(proc_id, (size_t)(NUM_MODES * sizeof(*val)), &val));
+            for(i = 0; i < NUM_MODES; i++)
+            {
+                val[i].par.l = modelist[i][0];
+                val[i].type = LONG_PAR;
+            }
+            *values = val;
+            *numValues = NUM_MODES;
+            break;
+        case FG_QUERY_VERTICAL_RESOLUTION:
+            *info = "Supported VerticalResolution values.";
+            HCkP(HAlloc(proc_id, (size_t)(NUM_MODES * sizeof(*val)), &val));
+            for(i = 0; i < NUM_MODES; i++)
+            {
+                val[i].par.l = modelist[i][1];
+                val[i].type = LONG_PAR;
+            }
+            *values = val;
+            *numValues = NUM_MODES;
+            break;
         case FG_QUERY_INFO_BOARDS:
         case FG_QUERY_BITS_PER_CHANNEL:
         case FG_QUERY_COLOR_SPACE:
         case FG_QUERY_DEVICE:
-        case FG_QUERY_EXT_TRIGGER:
         case FG_QUERY_FIELD:
         case FG_QUERY_GENERIC:
-        case FG_QUERY_HORIZONTAL_RESOLUTION:
-        case FG_QUERY_VERTICAL_RESOLUTION:
             *info = "Unused.";
             *values = NULL;
             *numValues = 0;
