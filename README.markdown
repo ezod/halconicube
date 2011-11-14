@@ -7,6 +7,16 @@ This is an acquisition interface for [MVTec HALCON] [halcon] for the [NET
 iCube] [icube] camera series, for 32-bit Linux.
 
 
+## Compilation
+
+The supplied makefile relies on the `HALCONROOT` and `HALCONARCH` environment
+variables, which are normally used by HALCON in Linux. It is recommended to add
+`libNETUSBCAM.so.*` provided by the NET iCube Linux driver to the directory
+`$(HALCONROOT)/lib/$(HALCONARCH)`. The compiled `hAcqICube.so` should then also
+be installed there, which will make the `ICube` acquisition interface available
+in HALCON.
+
+
 ## iCube SDK License Information
 
 Excerpted from the iCube SDK API Manual, version 2.0.0.7 (February 2010), p. 5:
