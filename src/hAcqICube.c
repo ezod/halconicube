@@ -16,12 +16,14 @@
 
 #include "NETUSBCAM_API.h"
 
+#define FG_PARAM_INDEX "index"
+
+#define FG_PARAM_INDEX_DESCR "index_description"
+
 /* Use this macro to display error messages                               */
 #define MY_PRINT_ERROR_MESSAGE(ERR) { \
     if (HDoLowError) IOPrintErrorMessage(ERR); }
 static char errMsg[MAX_STRING];
-
-#define STR_CASE_CMP(S1,S2)   strcasecmp(S1,S2)
 
 extern HUserExport Herror FGInit(Hproc_handle proc_id, FGClass * fg);
 extern HLibExport Herror IOPrintErrorMessage(char * err);
@@ -54,7 +56,7 @@ static int modelist[NUM_MODES][2] = {
 static pthread_mutex_t image_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t image_ready = PTHREAD_COND_INITIALIZER;
 
-static INT ImageComplete(void * buffer, unsigned int bsize, void * context)
+static INT ImageComplete(void * buffer, UINT bsize, void * context)
 {
     pthread_mutex_lock(&image_mutex);
 
@@ -70,8 +72,8 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
     INT i;
-    unsigned int nmodes = NUM_MODES;
-    unsigned int modes[NUM_MODES];
+    UINT mode, nmodes = NUM_MODES;
+    UINT modes[NUM_MODES];
 
     if(fginst->port >= num_devices)
     {
@@ -94,9 +96,17 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
             if(fginst->horizontal_resolution == modelist[modes[i]][0] && fginst->vertical_resolution == modelist[modes[i]][1])
             {
                 NETUSBCAM_SetMode(currInst->index, modes[i]);
+                fginst->horizontal_resolution = modelist[modes[i]][0];
+                fginst->vertical_resolution = modelist[modes[i]][1];
                 break;
             }
         }
+    }
+    else
+    {
+        NETUSBCAM_GetMode(currInst->index, &mode);
+        fginst->horizontal_resolution = modelist[mode][0];
+        fginst->vertical_resolution = modelist[mode][1];
     }
 
     if(fginst->image_width && fginst->image_height)
@@ -299,10 +309,44 @@ static Herror FGInfo(Hproc_handle proc_id, INT queryType, char ** info, Hcpar **
 static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param, Hcpar * value, INT num)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
+    INT i;
+    UINT nmodes = NUM_MODES;
+    UINT modes[NUM_MODES];
 
-    /* TODO: set parameters */
-    /* else
-        return H_ERR_FGPARAM; */
+    if(!strcasecmp(param, FG_PARAM_HORIZONTAL_RESOLUTION))
+    {
+        if(value->type != LONG_PAR)
+            return H_ERR_FGPART;
+        NETUSBCAM_GetModeList(currInst->index, &nmodes, modes);
+        for(i = 0; i < nmodes; i++)
+        {
+            if(value->par.l == modelist[modes[i]][0])
+            {
+                NETUSBCAM_SetMode(currInst->index, modes[i]);
+                fginst->horizontal_resolution = modelist[modes[i]][0];
+                fginst->vertical_resolution = modelist[modes[i]][1];
+                break;
+            }
+        }
+    }
+    else if(!strcasecmp(param, FG_PARAM_VERTICAL_RESOLUTION))
+    {
+        if(value->type != LONG_PAR)
+            return H_ERR_FGPART;
+        NETUSBCAM_GetModeList(currInst->index, &nmodes, modes);
+        for(i = 0; i < nmodes; i++)
+        {
+            if(value->par.l == modelist[modes[i]][1])
+            {
+                NETUSBCAM_SetMode(currInst->index, modes[i]);
+                fginst->horizontal_resolution = modelist[modes[i]][0];
+                fginst->vertical_resolution = modelist[modes[i]][1];
+                break;
+            }
+        }
+    }
+    else
+        return H_ERR_FGPARAM;
 
     return H_MSG_OK;
 }
@@ -313,9 +357,48 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
 
     *num = 1;
 
-    /* TODO: set parameters */
-    /* else
-        return H_ERR_FGPARAM; */
+    if(!strcasecmp(param, FG_PARAM_HORIZONTAL_RESOLUTION))
+    {
+        value->type = LONG_PAR;
+        value->par.l = fginst->horizontal_resolution;
+    }
+    else if(!strcasecmp(param, FG_PARAM_VERTICAL_RESOLUTION))
+    {
+        value->type = LONG_PAR;
+        value->par.l = fginst->vertical_resolution;
+    }
+    else if(!strcasecmp(param, FG_PARAM_IMAGE_WIDTH))
+    {
+        value->type = LONG_PAR;
+        value->par.l = fginst->image_width;
+    }
+    else if(!strcasecmp(param, FG_PARAM_IMAGE_HEIGHT))
+    {
+        value->type = LONG_PAR;
+        value->par.l = fginst->image_height;
+    }
+    else if(!strcasecmp(param, FG_PARAM_START_COL))
+    {
+        value->type = LONG_PAR;
+        value->par.l = fginst->start_col;
+    }
+    else if(!strcasecmp(param, FG_PARAM_START_ROW))
+    {
+        value->type = LONG_PAR;
+        value->par.l = fginst->start_row;
+    }
+    else if(!strcasecmp(param, FG_PARAM_INDEX))
+    {
+        value->type = LONG_PAR;
+        value->par.l = currInst->index;
+    }
+    else if(!strcasecmp(param, FG_PARAM_INDEX_DESCR))
+    {
+        value->type = STRING_PAR;
+        value->par.s = "Camera device index.";
+    }
+    else
+        return H_ERR_FGPARAM;
 
     return H_MSG_OK;
 }
