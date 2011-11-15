@@ -194,7 +194,8 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
     pthread_mutex_lock(&image_mutex);
     NETUSBCAM_SetTrigger(currInst->index, 1);
     clock_gettime(CLOCK_REALTIME, &timeout);
-    timeout.tv_nsec += currInst->grab_timeout * 1000000;
+    timeout.tv_sec += currInst->grab_timeout / 1000;
+    timeout.tv_nsec += (long)(currInst->grab_timeout % 1000) * 1000000L;
     timeout.tv_sec += timeout.tv_nsec / 1000000000L;
     timeout.tv_nsec %= 1000000000L;
     to = pthread_cond_timedwait(&image_ready, &image_mutex, &timeout);
