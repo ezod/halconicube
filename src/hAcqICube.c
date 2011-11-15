@@ -18,13 +18,22 @@
 #define FG_PARAM_INDEX "index"
 #define FG_PARAM_GRAB_TIMEOUT "grab_timeout"
 #define FG_PARAM_EXPOSURE_TIME "exposure_time"
+#define FG_PARAM_EXPOSURE_AUTO "exposure_auto"
+#define FG_PARAM_EXPOSURE_TARGET "exposure_target"
+#define FG_PARAM_EXPOSURE_MSEC "exposure_msec"
 
 #define FG_PARAM_GRAB_TIMEOUT_RANGE "grab_timeout_range"
 #define FG_PARAM_EXPOSURE_TIME_RANGE "exposure_time_range"
+#define FG_PARAM_EXPOSURE_TARGET_RANGE "exposure_target_range"
+
+#define FG_PARAM_EXPOSURE_AUTO_VALUES "exposure_auto_values"
 
 #define FG_PARAM_INDEX_DESCR "index_description"
 #define FG_PARAM_GRAB_TIMEOUT_DESCR "grab_timeout_description"
 #define FG_PARAM_EXPOSURE_TIME_DESCR "exposure_time_description"
+#define FG_PARAM_EXPOSURE_AUTO_DESCR "exposure_auto_description"
+#define FG_PARAM_EXPOSURE_TARGET_DESCR "exposure_target_description"
+#define FG_PARAM_EXPOSURE_MSEC_DESCR "exposure_msec_description"
 
 /* Use this macro to display error messages                               */
 #define MY_PRINT_ERROR_MESSAGE(ERR) { \
@@ -37,7 +46,6 @@ typedef struct
 {
     INT index;
     INT grab_timeout;
-    float exposure;
     HBYTE * image;
 } TFGInstance;
 
@@ -232,23 +240,27 @@ static Herror FGInfo(Hproc_handle proc_id, INT queryType, char ** info, Hcpar **
             break;
         case FG_QUERY_PARAMETERS:
             *info = "Additional parameters for this image acquisition interface.";
-            HCkP(HAlloc(proc_id, (size_t)(3 * sizeof(Hcpar)), &val));
+            HCkP(HAlloc(proc_id, (size_t)(6 * sizeof(Hcpar)), &val));
             val[0].par.s = FG_PARAM_INDEX;
             val[1].par.s = FG_PARAM_GRAB_TIMEOUT;
             val[2].par.s = FG_PARAM_EXPOSURE_TIME;
-            for(i = 0; i < 3; i++)
+            val[3].par.s = FG_PARAM_EXPOSURE_AUTO;
+            val[4].par.s = FG_PARAM_EXPOSURE_TARGET;
+            val[5].par.s = FG_PARAM_EXPOSURE_MSEC;
+            for(i = 0; i < 6; i++)
                 val[i].type = STRING_PAR;
             *values = val;
-            *numValues = 3;
+            *numValues = 6;
             break;
         case FG_QUERY_PARAMETERS_RO:
             *info = "Additional read-only parameters for this interface.";
-            HCkP(HAlloc(proc_id, (size_t)(1 * sizeof(Hcpar)), &val));
+            HCkP(HAlloc(proc_id, (size_t)(2 * sizeof(Hcpar)), &val));
             val[0].par.s = FG_PARAM_INDEX;
-            for(i = 0; i < 1; i++)
+            val[1].par.s = FG_PARAM_EXPOSURE_MSEC;
+            for(i = 0; i < 2; i++)
                 val[i].type = STRING_PAR;
             *values = val;
-            *numValues = 1;
+            *numValues = 2;
             break;
         case FG_QUERY_PARAMETERS_WO:
             *info = "Additional write-only parameters for this interface.";
@@ -335,10 +347,9 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
     HBOOL ok;
     INT i;
-    float f;
     UINT nmodes = NUM_MODES;
     UINT modes[NUM_MODES];
-    PARAM_PROPERTY_f property_f;
+    PARAM_PROPERTY property;
 
     if(!strcasecmp(param, FG_PARAM_HORIZONTAL_RESOLUTION))
     {
@@ -390,22 +401,41 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME))
     {
-        if(value->type != FLOAT_PAR)
+        if(value->type != LONG_PAR)
             return H_ERR_FGPART;
-        /* FIXME: GetExposureRange doesn't seem to return good values */
-        if(NETUSBCAM_GetExposureRange(currInst->index, &property_f) != 0)
-        {
-            MY_PRINT_ERROR_MESSAGE("get exposure range failed")
-            return H_ERR_FGSETPAR;
-        }
-        if(value->par.f < property_f.nMin || value->par.f > property_f.nMax)
+        NETUSBCAM_GetParamAuto(currInst->index, REG_EXPOSURE_TIME, &i);
+        if(i)
+            return H_ERR_FGPARNA;
+        NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TIME, &property);
+        if(value->par.l < property.nMin || value->par.l > property.nMax)
             return H_ERR_FGPARV;
-        f = (float)value->par.f;
-        if(NETUSBCAM_SetExposure(currInst->index, f) != 0)
-        {
-            MY_PRINT_ERROR_MESSAGE("set exposure failed")
+        if(NETUSBCAM_SetCamParameter(currInst->index, REG_EXPOSURE_TIME, (unsigned long)value->par.l) != 0)
             return H_ERR_FGSETPAR;
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_AUTO))
+    {
+        if(value->type != STRING_PAR)
+            return H_ERR_FGPART;
+        if(!strcasecmp(value->par.s, "true"))
+        {
+            if(NETUSBCAM_SetParamAuto(currInst->index, REG_EXPOSURE_TIME, 1) != 0)
+                return H_ERR_FGSETPAR;
         }
+        else if(!strcasecmp(value->par.s, "false"))
+        {
+            if(NETUSBCAM_SetParamAuto(currInst->index, REG_EXPOSURE_TIME, 0) != 0)
+                return H_ERR_FGSETPAR;
+        }
+        else
+            return H_ERR_FGPARV;
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TARGET))
+    {
+        if(value->type != LONG_PAR)
+            return H_ERR_FGPART;
+        NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TARGET, &property);
+        if(NETUSBCAM_SetCamParameter(currInst->index, REG_EXPOSURE_TARGET, (unsigned long)value->par.l) != 0)
+            return H_ERR_FGSETPAR;
     }
     else
         return H_ERR_FGPARAM;
@@ -418,7 +448,8 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
     INT i;
     float f;
-    PARAM_PROPERTY_f property_f;
+    unsigned long ul;
+    PARAM_PROPERTY property;
 
     *num = 1;
 
@@ -464,12 +495,30 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME))
     {
+        value->type = LONG_PAR;
+        if(NETUSBCAM_GetCamParameter(currInst->index, REG_EXPOSURE_TIME, &ul) != 0)
+            return H_ERR_FGGETPAR;
+        value->par.l = ul;
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_AUTO))
+    {
+        value->type = STRING_PAR;
+        if(NETUSBCAM_GetParamAuto(currInst->index, REG_EXPOSURE_TIME, &i) != 0)
+            return H_ERR_FGGETPAR;
+        value->par.s = i ? "true" : "false";
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TARGET))
+    {
+        value->type = LONG_PAR;
+        if(NETUSBCAM_GetCamParameter(currInst->index, REG_EXPOSURE_TARGET, &ul) != 0)
+            return H_ERR_FGGETPAR;
+        value->par.l = ul;
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_MSEC))
+    {
         value->type = FLOAT_PAR;
         if(NETUSBCAM_GetExposure(currInst->index, &f) != 0)
-        {
-            MY_PRINT_ERROR_MESSAGE("get exposure failed")
             return H_ERR_FGGETPAR;
-        }
         value->par.f = f;
     }
     else if(!strcasecmp(param, FG_PARAM_GRAB_TIMEOUT_RANGE))
@@ -480,22 +529,39 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
         value[1].par.l = GRAB_TIMEOUT_MAX;
         value[2].par.l = 10;
         value[3].par.l = GRAB_TIMEOUT_DEFAULT;
+        *num = 4;
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME_RANGE))
     {
-        /* FIXME: GetExposureRange doesn't seem to return good values */
-        if(NETUSBCAM_GetExposureRange(currInst->index, &property_f) != 0)
-        {
-            MY_PRINT_ERROR_MESSAGE("get exposure range failed")
+        if(NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TIME, &property) != 0)
             return H_ERR_FGGETPAR;
-        }
         for(i = 0; i < 4; i++)
-            value[i].type = FLOAT_PAR;
-        value[0].par.f = property_f.nMin;
-        value[1].par.f = property_f.nMax;
-        value[2].par.f = (property_f.nMax - property_f.nMin) / 100.0;
-        value[3].par.f = property_f.nDef;
+            value[i].type = LONG_PAR;
+        value[0].par.l = property.nMin;
+        value[1].par.l = property.nMax;
+        value[2].par.l = 1;
+        value[3].par.l = property.nDef;
         *num = 4;
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TARGET_RANGE))
+    {
+        if(NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TARGET, &property) != 0)
+            return H_ERR_FGGETPAR;
+        for(i = 0; i < 4; i++)
+            value[i].type = LONG_PAR;
+        value[0].par.l = property.nMin;
+        value[1].par.l = property.nMax;
+        value[2].par.l = 1;
+        value[3].par.l = property.nDef;
+        *num = 4;
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_AUTO_VALUES))
+    {
+        value[0].par.s = "false";
+        value[0].type = STRING_PAR;
+        value[1].par.s = "true";
+        value[1].type = STRING_PAR;
+        *num = 2;
     }
     else if(!strcasecmp(param, FG_PARAM_INDEX_DESCR))
     {
@@ -511,6 +577,21 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     {
         value->type = STRING_PAR;
         value->par.s = "Exposure time.";
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_AUTO_DESCR))
+    {
+        value->type = STRING_PAR;
+        value->par.s = "Toggle automatic exposure.";
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TARGET_DESCR))
+    {
+        value->type = STRING_PAR;
+        value->par.s = "Target brightness for automatic exposure.";
+    }
+    else if(!strcasecmp(param, FG_PARAM_EXPOSURE_MSEC_DESCR))
+    {
+        value->type = STRING_PAR;
+        value->par.s = "Exposure time in milliseconds.";
     }
     else
         return H_ERR_FGPARAM;
