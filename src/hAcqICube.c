@@ -548,7 +548,10 @@ Herror FGInit(Hproc_handle proc_id, FGClass * fg)
     fgClass = fg;
 
     for(i = 0; i < FG_MAX_INST; i++)
+    {
         FGInst[i].index = i;
+        FGInst[i].grab_timeout = GRAB_TIMEOUT_DEFAULT;
+    }
 
     num_devices = NETUSBCAM_Init();
     if(num_devices <= 0)
