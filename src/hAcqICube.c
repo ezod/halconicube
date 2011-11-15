@@ -16,11 +16,14 @@
 #include "NETUSBCAM_API.h"
 
 #define FG_PARAM_INDEX "index"
+#define FG_PARAM_GRAB_TIMEOUT "grab_timeout"
 #define FG_PARAM_EXPOSURE_TIME "exposure_time"
 
+#define FG_PARAM_GRAB_TIMEOUT_RANGE "grab_timeout_range"
 #define FG_PARAM_EXPOSURE_TIME_RANGE "exposure_time_range"
 
 #define FG_PARAM_INDEX_DESCR "index_description"
+#define FG_PARAM_GRAB_TIMEOUT_DESCR "grab_timeout_description"
 #define FG_PARAM_EXPOSURE_TIME_DESCR "exposure_time_description"
 
 /* Use this macro to display error messages                               */
@@ -33,6 +36,7 @@ extern HLibExport Herror IOPrintErrorMessage(char * err);
 typedef struct
 {
     INT index;
+    INT grab_timeout;
     float exposure;
     HBYTE * image;
 } TFGInstance;
@@ -55,6 +59,9 @@ static int modelist[NUM_MODES][2] = {
     {2048, 1536},
     {2592, 1944}
 };
+
+#define GRAB_TIMEOUT_MAX 10000
+#define GRAB_TIMEOUT_DEFAULT 1000
 
 static pthread_mutex_t image_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t image_ready = PTHREAD_COND_INITIALIZER;
@@ -171,7 +178,8 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
     Herror err;
-    INT save;
+    INT save, to;
+    struct timespec timeout;
 
     HReadSysComInfo(proc_id, HGInitNewImage, &save);
     HWriteSysComInfo(proc_id, HGInitNewImage, FALSE);
@@ -185,9 +193,17 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
 
     pthread_mutex_lock(&image_mutex);
     NETUSBCAM_SetTrigger(currInst->index, 1);
-    pthread_cond_wait(&image_ready, &image_mutex);
-    memcpy((void *)image[0].pixel.b, (void *)currInst->image, fginst->image_width * fginst->image_height);
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_nsec += currInst->grab_timeout * 1000000;
+    timeout.tv_sec += timeout.tv_nsec / 1000000000L;
+    timeout.tv_nsec %= 1000000000L;
+    to = pthread_cond_timedwait(&image_ready, &image_mutex, &timeout);
+    if(!to)
+        memcpy((void *)image[0].pixel.b, (void *)currInst->image, fginst->image_width * fginst->image_height);
     pthread_mutex_unlock(&image_mutex);
+
+    if(to)
+        return H_ERR_FGTIMEOUT;
 
     return H_MSG_OK;
 }
@@ -215,13 +231,14 @@ static Herror FGInfo(Hproc_handle proc_id, INT queryType, char ** info, Hcpar **
             break;
         case FG_QUERY_PARAMETERS:
             *info = "Additional parameters for this image acquisition interface.";
-            HCkP(HAlloc(proc_id, (size_t)(2 * sizeof(Hcpar)), &val));
+            HCkP(HAlloc(proc_id, (size_t)(3 * sizeof(Hcpar)), &val));
             val[0].par.s = FG_PARAM_INDEX;
-            val[1].par.s = FG_PARAM_EXPOSURE_TIME;
-            for(i = 0; i < 2; i++)
+            val[1].par.s = FG_PARAM_GRAB_TIMEOUT;
+            val[2].par.s = FG_PARAM_EXPOSURE_TIME;
+            for(i = 0; i < 3; i++)
                 val[i].type = STRING_PAR;
             *values = val;
-            *numValues = 2;
+            *numValues = 3;
             break;
         case FG_QUERY_PARAMETERS_RO:
             *info = "Additional read-only parameters for this interface.";
@@ -362,6 +379,14 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
         if(!ok)
             return H_ERR_FGPARV;
     }
+    else if(!strcasecmp(param, FG_PARAM_GRAB_TIMEOUT))
+    {
+        if(value->type != LONG_PAR)
+            return H_ERR_FGPART;
+        if(value->par.l < 0 || value->par.l > GRAB_TIMEOUT_MAX)
+            return H_ERR_FGPARV;
+        currInst->grab_timeout = value->par.l;
+    }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME))
     {
         if(value->type != FLOAT_PAR)
@@ -431,6 +456,11 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
         value->type = LONG_PAR;
         value->par.l = currInst->index;
     }
+    else if(!strcasecmp(param, FG_PARAM_GRAB_TIMEOUT))
+    {
+        value->type = LONG_PAR;
+        value->par.l = currInst->grab_timeout;
+    }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME))
     {
         value->type = FLOAT_PAR;
@@ -440,6 +470,15 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
             return H_ERR_FGGETPAR;
         }
         value->par.f = f;
+    }
+    else if(!strcasecmp(param, FG_PARAM_GRAB_TIMEOUT_RANGE))
+    {
+        for(i = 0; i < 4; i++)
+            value[i].type = LONG_PAR;
+        value[0].par.l = 0;
+        value[1].par.l = GRAB_TIMEOUT_MAX;
+        value[2].par.l = 10;
+        value[3].par.l = GRAB_TIMEOUT_DEFAULT;
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME_RANGE))
     {
@@ -461,6 +500,11 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     {
         value->type = STRING_PAR;
         value->par.s = "Camera device index.";
+    }
+    else if(!strcasecmp(param, FG_PARAM_GRAB_TIMEOUT_DESCR))
+    {
+        value->type = STRING_PAR;
+        value->par.s = "Grab timeout in milliseconds.";
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME_DESCR))
     {
