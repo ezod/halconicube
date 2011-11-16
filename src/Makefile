@@ -10,7 +10,7 @@ all: hAcqICube.so
 hAcqICube.so: hAcqICube.o
 	$(CC) $(LDFLAGS) -s -shared -o $@ $^ -L$(H_LIB) -lhalcon -lNETUSBCAM -lpthread
 
-hAcqICube.o: hAcqICube.c NETUSBCAM_API.h
+hAcqICube.o: hAcqICube.c netusbcamextra.h
 	$(CC) $(CFLAGS) -I$(H_INCLUDE) -c $<
 
 clean:

@@ -13,7 +13,8 @@
 #include <Halcon.h>
 #include <hlib/CIOFrameGrab.h>
 
-#include "NETUSBCAM_API.h"
+#include "netusbcamextra.h"
+#include <NETUSBCAM_API.h>
 
 #define FG_PARAM_INDEX "index"
 #define FG_PARAM_GRAB_TIMEOUT "grab_timeout"
