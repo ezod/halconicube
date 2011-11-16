@@ -1,3 +1,8 @@
+/** \file netusbcamextra.h
+ * \brief Extra definitions for NET iCube API.
+ * \author Aaron Mavrinac <mavrin1@uwindsor.ca>
+ */
+
 #ifndef __NETUSBCAMEXTRA_H__
 #define __NETUSBCAMEXTRA_H__
 
