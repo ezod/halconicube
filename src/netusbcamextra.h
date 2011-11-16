@@ -47,6 +47,13 @@ enum {
     REG_DEFECT_COR = 43
 };
 
+enum {
+    TRIG_SW_START = 0,
+    TRIG_SW_DO = 1,
+    TRIG_HW_START = 2,
+    TRIG_STOP = 3
+};
+
 __END_DECLS
 
 #endif /* __NETUSBCAMEXTRA_H__ */

@@ -163,11 +163,11 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
         return H_ERR_MEM;
 
     if(fginst->external_trigger)
-        NETUSBCAM_SetTrigger(currInst->index, 2);
+        NETUSBCAM_SetTrigger(currInst->index, TRIG_HW_START);
     else
     {
-        NETUSBCAM_SetTrigger(currInst->index, 3);
-        NETUSBCAM_SetTrigger(currInst->index, 0);
+        NETUSBCAM_SetTrigger(currInst->index, TRIG_STOP);
+        NETUSBCAM_SetTrigger(currInst->index, TRIG_SW_START);
     }
 
     NETUSBCAM_SetCallback(currInst->index, CALLBACK_RAW, &ImageComplete, (void *)currInst->image);
@@ -224,7 +224,7 @@ static Herror FGGrab(Hproc_handle proc_id, FGInstance * fginst, Himage * image, 
     }
 
     pthread_mutex_lock(&image_mutex);
-    NETUSBCAM_SetTrigger(currInst->index, 1);
+    NETUSBCAM_SetTrigger(currInst->index, TRIG_SW_DO);
     clock_gettime(CLOCK_REALTIME, &timeout);
     timeout.tv_sec += currInst->grab_timeout / 1000;
     timeout.tv_nsec += (long)(currInst->grab_timeout % 1000) * 1000000L;
