@@ -87,6 +87,29 @@ static INT ImageComplete(void * buffer, UINT bsize, void * context)
     return 0;
 }
 
+static INT AllocateImage(FGInstance * fginst)
+{
+    TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
+    void * ptr;
+
+    NETUSBCAM_GetResolution(currInst->index, &fginst->image_width, &fginst->image_height, &fginst->start_col, &fginst->start_row);
+
+    if(currInst->image)
+    {
+        ptr = realloc(currInst->image, fginst->image_width * fginst->image_height * sizeof(HBYTE));
+        if(ptr)
+            currInst->image = (HBYTE *)ptr;
+        else
+            return 1;
+    }
+    else
+    {
+        currInst->image = (HBYTE *)malloc(fginst->image_width * fginst->image_height * sizeof(HBYTE));
+    }
+    
+    return 0;
+}
+
 static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
 {
     TFGInstance * currInst = (TFGInstance *)fginst->gen_pointer;
@@ -136,8 +159,8 @@ static Herror FGOpen(Hproc_handle proc_id, FGInstance * fginst)
         }
     }
 
-    NETUSBCAM_GetResolution(currInst->index, &fginst->image_width, &fginst->image_height, &fginst->start_col, &fginst->start_row);
-    currInst->image = (HBYTE *)malloc(fginst->image_width * fginst->image_height * sizeof(HBYTE));
+    if(AllocateImage(fginst) != 0)
+        return H_ERR_MEM;
 
     if(fginst->external_trigger)
         NETUSBCAM_SetTrigger(currInst->index, 2);
@@ -351,11 +374,19 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     UINT nmodes = NUM_MODES;
     UINT modes[NUM_MODES];
     PARAM_PROPERTY param_property;
+    ROI_RANGE_PROPERTY roi_range_property;
 
     if(!strcasecmp(param, FG_PARAM_HORIZONTAL_RESOLUTION))
     {
         if(value->type != LONG_PAR)
             return H_ERR_FGPART;
+        if(value->par.l == fginst->horizontal_resolution)
+            return H_MSG_OK;
+        if(NETUSBCAM_Stop(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("stop camera failed")
+            return H_ERR_FGSETPAR;
+        }
         ok = FALSE;
         NETUSBCAM_GetModeList(currInst->index, &nmodes, modes);
         for(i = 0; i < nmodes; i++)
@@ -371,11 +402,25 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
         }
         if(!ok)
             return H_ERR_FGPARV;
+        if(AllocateImage(fginst) != 0)
+            return H_ERR_MEM;
+        if(NETUSBCAM_Start(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("restart camera failed")
+            return H_ERR_FGSETPAR;
+        }
     }
     else if(!strcasecmp(param, FG_PARAM_VERTICAL_RESOLUTION))
     {
         if(value->type != LONG_PAR)
             return H_ERR_FGPART;
+        if(value->par.l == fginst->vertical_resolution)
+            return H_MSG_OK;
+        if(NETUSBCAM_Stop(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("stop camera failed")
+            return H_ERR_FGSETPAR;
+        }
         ok = FALSE;
         NETUSBCAM_GetModeList(currInst->index, &nmodes, modes);
         for(i = 0; i < nmodes; i++)
@@ -391,6 +436,63 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
         }
         if(!ok)
             return H_ERR_FGPARV;
+        if(AllocateImage(fginst) != 0)
+            return H_ERR_MEM;
+        if(NETUSBCAM_Start(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("restart camera failed")
+            return H_ERR_FGSETPAR;
+        }
+    }
+    else if(!strcasecmp(param, FG_PARAM_IMAGE_WIDTH))
+    {
+        if(value->type != LONG_PAR)
+            return H_ERR_FGPART;
+        if(value->par.l == fginst->image_width)
+            return H_MSG_OK;
+        if(NETUSBCAM_Stop(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("stop camera failed")
+            return H_ERR_FGSETPAR;
+        }
+        NETUSBCAM_GetResolutionRange(currInst->index, &roi_range_property);
+        if(value->par.l < roi_range_property.nXMin || value->par.l > roi_range_property.nXMax)
+            return H_ERR_FGPARV;
+        fginst->image_width = value->par.l;
+        if(NETUSBCAM_SetResolution(currInst->index, fginst->image_width, fginst->image_height, fginst->start_col, fginst->start_row) != 0)
+            return H_ERR_FGSETPAR;
+        if(AllocateImage(fginst) != 0)
+            return H_ERR_MEM;
+        if(NETUSBCAM_Start(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("restart camera failed")
+            return H_ERR_FGSETPAR;
+        }
+    }
+    else if(!strcasecmp(param, FG_PARAM_IMAGE_HEIGHT))
+    {
+        if(value->type != LONG_PAR)
+            return H_ERR_FGPART;
+        if(value->par.l == fginst->image_height)
+            return H_MSG_OK;
+        if(NETUSBCAM_Stop(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("stop camera failed")
+            return H_ERR_FGSETPAR;
+        }
+        NETUSBCAM_GetResolutionRange(currInst->index, &roi_range_property);
+        if(value->par.l < roi_range_property.nYMin || value->par.l > roi_range_property.nYMax)
+            return H_ERR_FGPARV;
+        fginst->image_height = value->par.l;
+        if(NETUSBCAM_SetResolution(currInst->index, fginst->image_width, fginst->image_height, fginst->start_col, fginst->start_row) != 0)
+            return H_ERR_FGSETPAR;
+        if(AllocateImage(fginst) != 0)
+            return H_ERR_MEM;
+        if(NETUSBCAM_Start(currInst->index) != 0)
+        {
+            MY_PRINT_ERROR_MESSAGE("restart camera failed")
+            return H_ERR_FGSETPAR;
+        }
     }
     else if(!strcasecmp(param, FG_PARAM_GRAB_TIMEOUT))
     {
@@ -636,6 +738,7 @@ Herror FGInit(Hproc_handle proc_id, FGClass * fg)
     {
         FGInst[i].index = i;
         FGInst[i].grab_timeout = GRAB_TIMEOUT_DEFAULT;
+        FGInst[i].image = NULL;
     }
 
     num_devices = NETUSBCAM_Init();
