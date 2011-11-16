@@ -349,7 +349,7 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     INT i;
     UINT nmodes = NUM_MODES;
     UINT modes[NUM_MODES];
-    PARAM_PROPERTY property;
+    PARAM_PROPERTY param_property;
 
     if(!strcasecmp(param, FG_PARAM_HORIZONTAL_RESOLUTION))
     {
@@ -406,8 +406,8 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
         NETUSBCAM_GetParamAuto(currInst->index, REG_EXPOSURE_TIME, &i);
         if(i)
             return H_ERR_FGPARNA;
-        NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TIME, &property);
-        if(value->par.l < property.nMin || value->par.l > property.nMax)
+        NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TIME, &param_property);
+        if(value->par.l < param_property.nMin || value->par.l > param_property.nMax)
             return H_ERR_FGPARV;
         if(NETUSBCAM_SetCamParameter(currInst->index, REG_EXPOSURE_TIME, (unsigned long)value->par.l) != 0)
             return H_ERR_FGSETPAR;
@@ -433,7 +433,9 @@ static Herror FGSetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     {
         if(value->type != LONG_PAR)
             return H_ERR_FGPART;
-        NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TARGET, &property);
+        NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TARGET, &param_property);
+        if(value->par.l < param_property.nMin || value->par.l > param_property.nMax)
+            return H_ERR_FGPARV;
         if(NETUSBCAM_SetCamParameter(currInst->index, REG_EXPOSURE_TARGET, (unsigned long)value->par.l) != 0)
             return H_ERR_FGSETPAR;
     }
@@ -449,7 +451,7 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     INT i;
     float f;
     unsigned long ul;
-    PARAM_PROPERTY property;
+    PARAM_PROPERTY param_property;
 
     *num = 1;
 
@@ -533,26 +535,26 @@ static Herror FGGetParam(Hproc_handle proc_id, FGInstance * fginst, char * param
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TIME_RANGE))
     {
-        if(NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TIME, &property) != 0)
+        if(NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TIME, &param_property) != 0)
             return H_ERR_FGGETPAR;
         for(i = 0; i < 4; i++)
             value[i].type = LONG_PAR;
-        value[0].par.l = property.nMin;
-        value[1].par.l = property.nMax;
+        value[0].par.l = param_property.nMin;
+        value[1].par.l = param_property.nMax;
         value[2].par.l = 1;
-        value[3].par.l = property.nDef;
+        value[3].par.l = param_property.nDef;
         *num = 4;
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_TARGET_RANGE))
     {
-        if(NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TARGET, &property) != 0)
+        if(NETUSBCAM_GetCamParameterRange(currInst->index, REG_EXPOSURE_TARGET, &param_property) != 0)
             return H_ERR_FGGETPAR;
         for(i = 0; i < 4; i++)
             value[i].type = LONG_PAR;
-        value[0].par.l = property.nMin;
-        value[1].par.l = property.nMax;
+        value[0].par.l = param_property.nMin;
+        value[1].par.l = param_property.nMax;
         value[2].par.l = 1;
-        value[3].par.l = property.nDef;
+        value[3].par.l = param_property.nDef;
         *num = 4;
     }
     else if(!strcasecmp(param, FG_PARAM_EXPOSURE_AUTO_VALUES))
